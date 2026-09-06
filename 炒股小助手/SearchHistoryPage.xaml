@@ -1,0 +1,16 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     SearchHistoryPage.xaml —— "历史搜索"页面
+
+     将来内容：用户搜过的股票代码历史记录列表（带时间），点一下能重新搜索。
+     现在：先铺黑底 + 一行灰色占位字，用来验证"按钮点一下、页面能切过来"。
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<UserControl x:Class="炒股小助手.SearchHistoryPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Background="#FF111111">
+        <TextBlock Text="历史搜索页面（内容开发中）"
+                   Foreground="#FF7A7A7A" FontSize="15"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+    </Grid>
+</UserControl>

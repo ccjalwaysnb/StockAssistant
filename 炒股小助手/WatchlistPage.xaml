@@ -1,0 +1,19 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     WatchlistPage.xaml —— "自选股"页面
+
+     将来内容：自选股票列表（表头大概有：代码 / 名称 / 现价 / 涨跌幅…），
+               支持把代码加入自选、删除自选，双击某行跳到行情页。
+     现在：先铺黑底 + 一行灰色占位字，用来验证"按钮点一下、页面能切过来"。
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<UserControl x:Class="炒股小助手.WatchlistPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- 根 Grid 铺黑底，跟主窗口底色一致（见 MainPage.xaml 里的说明） -->
+    <Grid Background="#FF111111">
+        <!-- 占位字：灰色、水平垂直都居中 -->
+        <TextBlock Text="自选股页面（内容开发中）"
+                   Foreground="#FF7A7A7A" FontSize="15"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+    </Grid>
+</UserControl>

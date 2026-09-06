@@ -1,0 +1,17 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     DailyStatsPage.xaml —— "当日统计"页面
+
+     将来内容：今天大盘/个股的涨跌统计（比如自选里涨了几只、跌了几只、
+               红盘绿盘家数、板块热度之类），适合放图表或统计卡片。
+     现在：先铺黑底 + 一行灰色占位字，用来验证"按钮点一下、页面能切过来"。
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<UserControl x:Class="炒股小助手.DailyStatsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Background="#FF111111">
+        <TextBlock Text="当日统计页面（内容开发中）"
+                   Foreground="#FF7A7A7A" FontSize="15"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+    </Grid>
+</UserControl>

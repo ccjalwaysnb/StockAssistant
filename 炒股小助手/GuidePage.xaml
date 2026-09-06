@@ -1,0 +1,17 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     GuidePage.xaml —— "操作教程"页面
+
+     将来内容：教用户怎么用这个软件的图文说明（比如：怎么搜股票、
+               怎么加自选、红涨绿跌怎么看…），适合放文本 + 图片。
+     现在：先铺黑底 + 一行灰色占位字，用来验证"按钮点一下、页面能切过来"。
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<UserControl x:Class="炒股小助手.GuidePage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Background="#FF111111">
+        <TextBlock Text="操作教程页面（内容开发中）"
+                   Foreground="#FF7A7A7A" FontSize="15"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+    </Grid>
+</UserControl>

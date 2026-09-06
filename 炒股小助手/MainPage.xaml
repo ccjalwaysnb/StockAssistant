@@ -1,0 +1,53 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     MainPage.xaml —— "主界面"页（程序一打开看到的第一页）
+
+     布局（从上到下）：
+       ① 应用名：股票小助手.v1（加粗大字，水平居中，靠近顶部）
+       ② 搜索框 + 搜索按钮（目前纯摆设，没绑任何搜索逻辑）
+       ③ 一行灰色小提示
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<UserControl x:Class="炒股小助手.MainPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- 根 Grid 先铺一层黑底。
+         UserControl 本身是"透明"的，不主动铺色就会透出底下主窗口的颜色，
+         每页都统一 #111111，保证切页时视觉一致、不闪底色 -->
+    <Grid Background="#FF111111">
+
+        <!-- StackPanel：子控件从上往下竖着排。
+             HorizontalAlignment="Center" 让整列在页面里水平居中；
+             Margin="0,52,0,0" 表示上边距 52px，让内容从"正上方"开始往下排 -->
+        <StackPanel HorizontalAlignment="Center" Margin="0,52,0,0">
+
+            <!-- ① 应用名 -->
+            <!-- FontWeight="Bold" = 加粗；FontSize 32 是标题级别的大字 -->
+            <TextBlock Text="股票小助手.v1"
+                       FontSize="32" FontWeight="Bold"
+                       Foreground="White"
+                       HorizontalAlignment="Center"/>
+
+            <!-- ② 搜索区：一个横排的"小盒子"（输入框 + 搜索按钮） -->
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Center"
+                        Margin="0,32,0,0">
+                <!-- Orientation="Horizontal"：让里面的子控件从"竖着排"改成"横着排" -->
+                <!-- 搜索输入框：x:Name 起名，将来接搜索逻辑时按名字取它里面的文字 -->
+                <TextBox x:Name="SearchBox"
+                         Width="300" Height="34"
+                         FontSize="15"
+                         VerticalContentAlignment="Center"/>
+                <!-- 搜索按钮：样式 SearchBtn 来自 App.xaml；Click 暂时指向一个空方法 -->
+                <Button Content="搜索"
+                        Style="{StaticResource SearchBtn}"
+                        Click="Search_Click"/>
+            </StackPanel>
+
+            <!-- ③ 灰色小提示：告诉你这里现在还不能搜（功能开发中） -->
+            <TextBlock Text="输入股票代码后点搜索（功能开发中）"
+                       FontSize="12" Foreground="#FF8A8A8A"
+                       HorizontalAlignment="Center"
+                       Margin="0,12,0,0"/>
+        </StackPanel>
+    </Grid>
+</UserControl>
