@@ -34,32 +34,6 @@
          FontFamily = 全局字体用微软雅黑，中文显示更整齐
          Loaded     = 窗口显示完成后触发 → 去代码里跑启动流程 -->
 
-    <!-- ═══════════════════════════════════════════════════════════════════════
-         【v0.1 旧版界面，已停用，注释留档】
-         内容：顶部股票代码输入框 + 注入按钮 + 底部一张只读盘口文字表
-         新版改成"启动流程 + 多页面"后，这块布局作废，行情功能以后在
-         v1 的页面里重做，所以整段包进 XML 注释里不参与运行
-         ═══════════════════════════════════════════════════════════════════════
-    <Grid Margin="20">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
-
-        <StackPanel Orientation="Horizontal" Grid.Row="0">
-            <TextBox x:Name="getstocknumber" Width="180" Height="30" FontSize="16"
-                     VerticalContentAlignment="Center" Text="sz159248"/>
-            <Button x:Name="Input" Content="注入代码" Width="100" Height="30"
-                    Margin="10,0,0,0" Click="Input_Click"/>
-        </StackPanel>
-
-        <TextBlock x:Name="QuoteBoard" Grid.Row="1" Margin="0,16,0,0"
-                   FontFamily="Consolas" FontSize="14" LineHeight="24"
-                   Text="等待数据..." TextWrapping="NoWrap"/>
-    </Grid>
-    -->
-    <!-- ══════════════════ 以上为 v0.1 旧界面 ══════════════════ -->
-
     <!-- 窗口的"内容总容器"：里面叠两层 -->
     <Grid>
 
