@@ -1,8 +1,10 @@
-﻿// MainPage.xaml.cs —— 主界面：市场选择 + 搜索 + 行情拉取（腾讯实时 / 东财历史与分时）
+﻿// MainPage.xaml.cs —— 主界面：市场选择 + 搜索 + 行情拉取（数据源全部腾讯）
 // 布局：A 字段 → B 搜索链(主) → C 市场区 → D 展示 → E 工具
+//       → F 数据拉取区（四个拉取方法都在这一块，方便自检）→ G K 线区(日K / 分钟K)
+using System.Globalization;        // CultureInfo：解析接口返回的小数/日期
 using System.Net.Http;
 using System.Text;                 // Encoding（GBK 解码）
-using System.Text.Json;            // JsonDocument（东财 JSON 解析）
+using System.Text.Json;            // JsonDocument（K 线 JSON 解析）
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -17,8 +19,7 @@ namespace 炒股小助手
         // 引擎物件
         private readonly DispatcherTimer cooldownTimer = new();   // 搜索冷却（1 秒）
         private readonly DispatcherTimer timeTimer = new();       // 腾讯时间戳轮询（0.5 秒，程序一开就转）
-        private readonly DispatcherTimer westTimeTimer = new();   // 东财时间戳轮询（1 秒，程序一开就转）
-        private readonly HttpClient http = new HttpClient();      // 共用请求器（腾讯+东财）
+        private readonly HttpClient http = new HttpClient();      // 共用请求器（全部走腾讯）
 
         // 市场档位：'0'未选 '1'沪 '2'深 '3'美；West/TenNumber 是拼好的完整代码（可为空）
         public char MarketMode = '0';
@@ -39,15 +40,20 @@ namespace 炒股小助手
         public decimal? sold1, sold2, sold3, sold4, sold5;        // 卖一~卖五 价
         public decimal? sold1v, sold2v, sold3v, sold4v, sold5v;   // 卖一~卖五 量
 
-        // 东财缓存（供画图/统计）
-        public List<decimal> HistoryCloses = new();  // 历史每日收盘价
-        public List<decimal> MinutePrices = new();   // 当日每分钟最新价
+        // ── 四个拉取方法的"收货区"（拉取方法只往这里存，不碰界面）──
+        public string TenTime = "";                    // ① 时间戳：yyyyMMddHHmmss，如 20260911150000
+        public string? tentime;                        //    上一次的时间戳（用来比对"有没有更新"）
+        // ② 实时盘口 → 就是上面那堆 price / volume / buy1... 字段
+        public List<Candle> DailyCandles = new();      // ③ 日K（历史每日）
+        public List<Candle> MinuteCandles = new();     // ④ 当日每分钟K
 
-        // 数据更新时间戳（两接口格式不同）
-        public string TenTime = "";   // 腾讯：yyyyMMddHHmmss 紧凑串，如 20260910153421
-        public long WestTime;         // 东财：Unix 秒，如 1789025661
-        public string? tentime;       // 上一次的腾讯时间戳（比对"数据有没有更新"用；初始为空）
-        public long? westtime;        // 上一次的东财时间戳（同上；初始为空）
+        // K 线图当前的标的（腾讯代码）。现在固定 159248；
+        // 以后想让"K 线跟着搜索走"，在 Search_Click 里加一行 KCode = TenNumber; 就行
+        public string KCode = "sz159248";
+
+        // K 线区切换按钮的两种底色（点中的亮蓝、没点的深灰，跟左侧导航一个风格）
+        private readonly Brush KBtnActive = new SolidColorBrush(Color.FromRgb(0x2F, 0x66, 0xE0));
+        private readonly Brush KBtnIdle = new SolidColorBrush(Color.FromRgb(0x26, 0x26, 0x26));
 
         // 涨跌色（A股：涨红跌绿）
         private static readonly Brush UpBrush = new SolidColorBrush(Color.FromRgb(0xE5, 0x39, 0x35));
@@ -59,27 +65,35 @@ namespace 炒股小助手
             InitializeComponent();
 
             Encoding.RegisterProvider(CodePagesEncodingProvider.Instance); // GBK 支持
-            http.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0");   // 东财偶发 403，带 UA/Referer 防
-            http.DefaultRequestHeaders.Add("Referer", "https://quote.eastmoney.com/");
+            http.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0");   // 带个 UA，稳一点
+            http.DefaultRequestHeaders.Add("Referer", "https://gu.qq.com/");
 
             cooldownTimer.Interval = TimeSpan.FromSeconds(1);
             cooldownTimer.Tick += CooldownTimer_Tick;
 
-            // 两条时间戳心跳：程序一打开（还在 loading 时）就开始跑
-            // 注意：没搜索过时 Ten/WestNumber 都是 null，方法内部直接 return 不发请求
-            timeTimer.Interval = TimeSpan.FromSeconds(0.5);        // 腾讯：0.5 秒一次
-            timeTimer.Tick += async (s, e) => await LoadTenTimeAsync();
+            // 心跳：程序一打开（还在 loading 时）就开始转，0.5 秒一轮
+            //   先拉时间戳（①）→ 发现它变了 = 盘口更新了 → 再拉盘口并刷界面（②）
+            // 注意：没搜索过时 TenNumber 是 null，① 内部直接 return 不发请求
+            timeTimer.Interval = TimeSpan.FromSeconds(0.5);
+            timeTimer.Tick += async (s, e) =>
+            {
+                await FetchTimeAsync();          // ① 只拉时间戳
+                if (tentime != TenTime)
+                {
+                    tentime = TenTime;
+                    await TenGet();              // ② 拉实时盘口 + 刷新界面
+                }
+            };
             timeTimer.Start();
 
-            westTimeTimer.Interval = TimeSpan.FromSeconds(1);      // 东财：1 秒一次
-            westTimeTimer.Tick += async (s, e) => await LoadWestTimeAsync();
-            westTimeTimer.Start();
+            ShowKChart(true);           // K 线区默认显示"日K"
+            Loaded += MainPage_Loaded;  // 主界面一露脸就自动拉 K 线（不绑搜索键）
         }
 
         // ══════════════ B. 主事件链：搜索按钮 ══════════════
         // 点击后顺序：① MarketMode=='0' 拦下 → ② 拼前缀(Ten/West) → ③ 冷却检查
-        //             → ④ 三路拉取：腾讯(TenGet) + 东财历史日收盘(仅此一次) + 东财分时(WestGet)
-        //（时间戳不在这里拉 —— 腾讯 0.5 秒 / 东财 1 秒两条心跳自动轮询）
+        //             → ④ 拉一次实时盘口(TenGet)，界面立刻有数据
+        //（时间戳由 0.5 秒心跳自动轮询；K 线在程序打开时自动拉，都不在这里）
         private void Search_Click(object sender, RoutedEventArgs e)
         {
             string input = SearchBox.Text.Trim();   // 只填纯数字，如 159248
@@ -105,10 +119,7 @@ namespace 炒股小助手
             cooldownTimer.Start();
 
             stockNumber = TenNumber ?? "";
-            _ = TenGet();                        // ① 腾讯实时（TenGet：拉取 + 刷展示框）
-            _ = LoadDailyClosesAsync();          // ② 东财历史日收盘（只在点搜索时拉，不进心跳）
-            _ = WestGet();                       // ③ 东财当日分时（WestGet：拉取 + 刷列表）
-            // 时间戳不在这里拉：腾讯 0.5 秒 / 东财 1 秒两条心跳自动轮询（程序打开就在跑）
+            _ = TenGet();                        // 拉一次实时盘口 + 刷展示框（K 线不在这里拉）
         }
 
         // 冷却 tick：Cooldown 倒数显示在按钮上，归 0 解锁
@@ -128,138 +139,11 @@ namespace 炒股小助手
             }
         }
 
-        // 拉取①：腾讯实时盘口（TenGet 总方法 + 两个子方法）
-        // TenGet 只做"串流程"：先拉数据进缓存，再把缓存填进展示框
+        // 实时行情总方法：负责"拉 + 刷"（用的是 F 区第 ② 个拉取方法）
         private async Task TenGet()
         {
-            await TenFetchAsync();   // 子①：拉取腾讯接口实时盘口 → 存入缓存字段
-            RefreshQuoteUI();        // 子②：把缓存数据填入展示框（UI）
-        }
-
-        // 子①：拉取腾讯实时盘口 → 缓存字段（GBK → ~ 切分 → 赋值）
-        private async Task TenFetchAsync()
-        {
-            if (string.IsNullOrEmpty(stockNumber)) return;
-            try
-            {
-                byte[] bytes = await http.GetByteArrayAsync("https://qt.gtimg.cn/q=" + stockNumber);
-                string[] f = Encoding.GetEncoding("GBK").GetString(bytes).Split('~');
-
-                stockName = f[1];
-                price = ToNum(f[3]);  preClose = ToNum(f[4]);  open = ToNum(f[5]);
-                volume = ToNum(f[6]);  buy1 = ToNum(f[9]);  buy1v = ToNum(f[10]);
-                buy2 = ToNum(f[11]);  buy2v = ToNum(f[12]);  buy3 = ToNum(f[13]);  buy3v = ToNum(f[14]);
-                buy4 = ToNum(f[15]);  buy4v = ToNum(f[16]);  buy5 = ToNum(f[17]);  buy5v = ToNum(f[18]);
-                sold1 = ToNum(f[19]);  sold1v = ToNum(f[20]);  sold2 = ToNum(f[21]);  sold2v = ToNum(f[22]);
-                sold3 = ToNum(f[23]);  sold3v = ToNum(f[24]);  sold4 = ToNum(f[25]);  sold4v = ToNum(f[26]);
-                sold5 = ToNum(f[27]);  sold5v = ToNum(f[28]);
-                change = ToNum(f[31]);  changePct = ToNum(f[32]);
-                high = ToNum(f[33]);  low = ToNum(f[34]);
-                amount = ToNum(f[37]);  turnover = ToNum(f[38]);
-            }
-            catch { ClearQuote(); }   // 失败 → 缓存清空（展示框由 TenGet 统一刷）
-        }
-
-        // 拉取②：东财 历史每日收盘价 → HistoryCloses
-        // klines 每行：日期,开,收,高,低,... → 取下标 2 收盘
-        private async Task LoadDailyClosesAsync()
-        {
-            if (WestNumber == null) return;
-            try
-            {
-                string url = $"https://push2his.eastmoney.com/api/qt/stock/kline/get?" +
-                    $"secid={WestNumber}&fields1=f1,f2,f3,f4,f5,f6" +
-                    "&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61" +
-                    "&klt=101&fqt=1&beg=0&end=20500101";   // klt=101 日线，全历史
-                string json = await http.GetStringAsync(url);
-                using var doc = JsonDocument.Parse(json);
-                var arr = doc.RootElement.GetProperty("data").GetProperty("klines").EnumerateArray();
-
-                HistoryCloses.Clear();
-                foreach (var item in arr)
-                {
-                    string[] c = item.GetString()!.Split(',');
-                    if (decimal.TryParse(c[2], out decimal v)) HistoryCloses.Add(v);
-                }
-
-                RefreshEastUI();   // 刷到就更新下方缓存区
-            }
-            catch { /* 失败就算了，下次搜索再拉 */ }
-        }
-
-        // 拉取③：东财当日每分钟价格（WestGet 总方法 + 两个子方法）
-        // WestGet 只串流程：先拉数据进缓存，再把缓存填进下方列表
-        private async Task WestGet()
-        {
-            await WestFetchAsync();   // 子①：拉东财当日分时 → MinutePrices 缓存
-            RefreshEastUI();          // 子②：缓存 → 下方列表（UI）
-        }
-
-        // 子①：拉东财当日分时 → MinutePrices
-        // trends 每行：时间,开?,最新价,高,低,量,额,均价 → 取下标 2 最新价
-        private async Task WestFetchAsync()
-        {
-            if (WestNumber == null) return;
-            try
-            {
-                string url = $"https://push2his.eastmoney.com/api/qt/stock/trends2/get?" +
-                    $"secid={WestNumber}&fields1=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13" +
-                    "&fields2=f51,f52,f53,f54,f55,f56,f57,f58&ndays=1&iscr=0";
-                string json = await http.GetStringAsync(url);
-                using var doc = JsonDocument.Parse(json);
-                var arr = doc.RootElement.GetProperty("data").GetProperty("trends").EnumerateArray();
-
-                MinutePrices.Clear();
-                foreach (var item in arr)
-                {
-                    string[] c = item.GetString()!.Split(',');
-                    if (decimal.TryParse(c[2], out decimal v)) MinutePrices.Add(v);
-                }
-            }
-            catch { /* 失败就算了，下次心跳再拉 */ }
-        }
-
-        // 拉取④：腾讯时间戳 → TenTime
-        // 腾讯 f[30] 是 14 位紧凑时间，如 20260910153421（= 2026-09-10 15:34:21）
-        private async Task LoadTenTimeAsync()
-        {
-            if (TenNumber == null) return;
-            try
-            {
-                byte[] bytes = await http.GetByteArrayAsync("https://qt.gtimg.cn/q=" + TenNumber);
-                string[] f = Encoding.GetEncoding("GBK").GetString(bytes).Split('~');
-                TenTime = f[30];
-
-                // 时间戳变了 = 盘口数据更新了 → 触发一次 TenGet（拉盘口 + 刷界面）
-                if (tentime != TenTime)
-                {
-                    tentime = TenTime;   // 记下这次的值，下次拿它比对
-                    _ = TenGet();
-                }
-            }
-            catch { }
-        }
-
-        // 拉取⑤：东财数据更新时间 → WestTime
-        // 东财 push2 实时接口的 f86 是 Unix 秒，如 1789025661（= 2026-09-10 15:34:21）
-        private async Task LoadWestTimeAsync()
-        {
-            if (WestNumber == null) return;
-            try
-            {
-                string url = $"https://push2.eastmoney.com/api/qt/stock/get?secid={WestNumber}&fields=f86";
-                string json = await http.GetStringAsync(url);
-                using var doc = JsonDocument.Parse(json);
-                WestTime = doc.RootElement.GetProperty("data").GetProperty("f86").GetInt64();
-
-                // 时间戳变了 = 东财数据更新了 → 触发一次 WestGet（拉当日分时 + 刷列表）
-                if (westtime != WestTime)
-                {
-                    westtime = WestTime;
-                    _ = WestGet();
-                }
-            }
-            catch { }
+            await FetchQuoteAsync();   // ② 拉实时盘口 → 缓存字段
+            RefreshQuoteUI();          // 把缓存数据填进展示框
         }
 
         // ══════════════ C. 市场按钮区 ══════════════
@@ -287,16 +171,7 @@ namespace 炒股小助手
 
         // ══════════════ D. 界面展示 ══════════════
 
-        // 东财缓存区：条数 + 两个列表重绑（Clear+Add 后强制 ListBox 重画）
-        private void RefreshEastUI()
-        {
-            eastDaily.Text = $"历史收盘：{HistoryCloses.Count} 条";
-            eastMinute.Text = $"当日分时：{MinutePrices.Count} 条";
-            listHistory.ItemsSource = null;   // 先断绑
-            listHistory.ItemsSource = HistoryCloses;
-            listMinute.ItemsSource = null;
-            listMinute.ItemsSource = MinutePrices;
-        }
+        // （原 RefreshEastUI：东财缓存 → 主页面下方两个列表，已随展示栏删除 · 2026-09-11）
 
         // 字段 → MainPage.xaml 的 TextBlock
         private void RefreshQuoteUI()
@@ -356,5 +231,152 @@ namespace 炒股小助手
             sold1 = sold2 = sold3 = sold4 = sold5 = null;
             sold1v = sold2v = sold3v = sold4v = sold5v = null;
         }
+
+        // ══════════════ F. 数据拉取区（四个方法都在这，方便自检）═════════════
+        // 四个方法各管一件事，都【只拉数据存进缓存】，不碰界面：
+        //   ① FetchTimeAsync     只拉时间戳（心跳用）
+        //   ② FetchQuoteAsync    只拉实时盘口
+        //   ③ FetchDailyKAsync   只拉日K（历史每日）
+        //   ④ FetchMinuteKAsync  只拉当日每分钟K
+        // 数据源全部腾讯：实时用 qt.gtimg.cn，K 线用 web.ifzq.gtimg.cn / ifzq.gtimg.cn
+
+        // ── ① 时间戳：只取 f[30]（14 位紧凑格式 yyyyMMddHHmmss）→ TenTime ──
+        private async Task FetchTimeAsync()
+        {
+            if (TenNumber == null) return;        // 还没选过市场 → 不发请求
+            try
+            {
+                byte[] bytes = await http.GetByteArrayAsync("https://qt.gtimg.cn/q=" + TenNumber);
+                TenTime = Encoding.GetEncoding("GBK").GetString(bytes).Split('~')[30];
+            }
+            catch { }
+        }
+
+        // ── ② 实时盘口：GBK 解码 → 按 ~ 切分 → 按下标填进缓存字段 ──
+        private async Task FetchQuoteAsync()
+        {
+            if (string.IsNullOrEmpty(stockNumber)) return;
+            try
+            {
+                byte[] bytes = await http.GetByteArrayAsync("https://qt.gtimg.cn/q=" + stockNumber);
+                string[] f = Encoding.GetEncoding("GBK").GetString(bytes).Split('~');
+
+                stockName = f[1];
+                price = ToNum(f[3]);  preClose = ToNum(f[4]);  open = ToNum(f[5]);
+                volume = ToNum(f[6]);  buy1 = ToNum(f[9]);  buy1v = ToNum(f[10]);
+                buy2 = ToNum(f[11]);  buy2v = ToNum(f[12]);  buy3 = ToNum(f[13]);  buy3v = ToNum(f[14]);
+                buy4 = ToNum(f[15]);  buy4v = ToNum(f[16]);  buy5 = ToNum(f[17]);  buy5v = ToNum(f[18]);
+                sold1 = ToNum(f[19]);  sold1v = ToNum(f[20]);  sold2 = ToNum(f[21]);  sold2v = ToNum(f[22]);
+                sold3 = ToNum(f[23]);  sold3v = ToNum(f[24]);  sold4 = ToNum(f[25]);  sold4v = ToNum(f[26]);
+                sold5 = ToNum(f[27]);  sold5v = ToNum(f[28]);
+                change = ToNum(f[31]);  changePct = ToNum(f[32]);
+                high = ToNum(f[33]);  low = ToNum(f[34]);
+                amount = ToNum(f[37]);  turnover = ToNum(f[38]);
+            }
+            catch { ClearQuote(); }   // 失败 → 缓存清空（界面由 TenGet 统一刷）
+        }
+
+        // ── ③ 日K：拉历史每日（qfq 前复权）→ DailyCandles ──
+        // 每行格式：[日期, 开, 收, 高, 低, 量]
+        private async Task FetchDailyKAsync()
+        {
+            try
+            {
+                string url = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?" +
+                             $"param={KCode},day,,,320,qfq";     // 320 根足够覆盖全历史（该 ETF 共 278 根）
+                string json = await http.GetStringAsync(url);
+                using var doc = JsonDocument.Parse(json);
+                var arr = doc.RootElement.GetProperty("data").GetProperty(KCode).GetProperty("day");
+
+                DailyCandles.Clear();
+                foreach (var row in arr.EnumerateArray())
+                    DailyCandles.Add(ToCandle(row, "yyyy-MM-dd"));
+            }
+            catch { }
+        }
+
+        // ── ④ 当日每分钟K：拉 m1 → MinuteCandles ──
+        // 每行格式：[时间 yyyyMMddHHmm, 开, 收, 高, 低, 量, {}, 额]
+        // 注意：m1 会跨天返回（实测 400 根里含前两天），所以只保留最后一天 = "当日"
+        private async Task FetchMinuteKAsync()
+        {
+            try
+            {
+                string url = "https://ifzq.gtimg.cn/appstock/app/kline/mkline?" +
+                             $"param={KCode},m1,,300";            // m1 一分钟；想换周期就改这里的 m1
+                string json = await http.GetStringAsync(url);
+                using var doc = JsonDocument.Parse(json);
+                var arr = doc.RootElement.GetProperty("data").GetProperty(KCode).GetProperty("m1");
+
+                var all = new List<Candle>();
+                foreach (var row in arr.EnumerateArray())
+                    all.Add(ToCandle(row, "yyyyMMddHHmm"));
+
+                string lastDay = all.Count > 0 ? all[^1].Date.ToString("yyyyMMdd") : "";
+                MinuteCandles.Clear();
+                foreach (Candle k in all)
+                    if (k.Date.ToString("yyyyMMdd") == lastDay) MinuteCandles.Add(k);
+            }
+            catch { }
+        }
+
+        // 一个 K 线行（JSON 数组）→ 一根 K 线：下标 0=时间/日期 1=开 2=收 3=高 4=低
+        private static Candle ToCandle(JsonElement row, string timeFormat)
+        {
+            decimal open  = decimal.Parse(row[1].GetString()!, CultureInfo.InvariantCulture);
+            decimal close = decimal.Parse(row[2].GetString()!, CultureInfo.InvariantCulture);
+            decimal high  = decimal.Parse(row[3].GetString()!, CultureInfo.InvariantCulture);
+            decimal low   = decimal.Parse(row[4].GetString()!, CultureInfo.InvariantCulture);
+
+            if (open <= 0) open = close;   // 脏数据兜底：没给"开"就用"收"顶上，免得画出歪柱子
+
+            return new Candle
+            {
+                Date  = DateTime.ParseExact(row[0].GetString()!, timeFormat, CultureInfo.InvariantCulture),
+                Open  = open,
+                Close = close,
+                High  = Math.Max(high, Math.Max(open, close)),   // 保证 最高 >= max(开,收)
+                Low   = Math.Min(low, Math.Min(open, close)),    // 保证 最低 <= min(开,收)
+            };
+        }
+
+        // ══════════════ G. K 线区：日K / 分钟K ══════════════
+        // 这一区只管"什么时候去拉、拉完怎么用"，拉取本身在 F 区
+
+        private bool kLoaded;   // 只在程序打开时拉一次（切页面回来不重拉）
+
+        // 主界面出来后自动拉一次（日K + 分钟K），跟搜索键无关
+        private void MainPage_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (kLoaded) return;
+            kLoaded = true;
+            _ = LoadKChartsAsync();
+        }
+
+        private async Task LoadKChartsAsync()
+        {
+            KChartDay.SetEmptyText("日K 加载中…");
+            await FetchDailyKAsync();                                    // ③ 拉日K
+            if (DailyCandles.Count == 0) KChartDay.SetEmptyText("日K 没拉到数据");
+            KChartDay.SetData(DailyCandles);                             // 灌进日K 图
+
+            KChartMin.SetEmptyText("分钟K 加载中…");
+            await FetchMinuteKAsync();                                   // ④ 拉当日每分钟K
+            if (MinuteCandles.Count == 0) KChartMin.SetEmptyText("分钟K 没拉到数据");
+            KChartMin.SetData(MinuteCandles);                            // 灌进分钟K 图
+        }
+
+        // 切换日K / 分钟K：两张图叠在同一格里，靠显隐切换；同时给按钮换底色
+        private void DayKBtn_Click(object sender, RoutedEventArgs e) => ShowKChart(true);
+        private void MinKBtn_Click(object sender, RoutedEventArgs e) => ShowKChart(false);
+
+        private void ShowKChart(bool day)
+        {
+            KChartDay.Visibility = day ? Visibility.Visible : Visibility.Collapsed;
+            KChartMin.Visibility = day ? Visibility.Collapsed : Visibility.Visible;
+            DayKBtn.Background = day ? KBtnActive : KBtnIdle;
+            MinKBtn.Background = day ? KBtnIdle : KBtnActive;
+        }
+
     }
 }

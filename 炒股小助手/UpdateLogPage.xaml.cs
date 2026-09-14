@@ -1,18 +1,18 @@
 ﻿// ═══════════════════════════════════════════════════════════════════════════
-// SettingsPage.xaml.cs —— "设置"页面
+// UpdateLogPage.xaml.cs —— "更新日志"页的后台代码
 //
-// 目前是占位页，没有任何逻辑。
-// （2026-09-11：K 线测试已毕业 —— 图表抽成 CandleChart 控件，搬到主界面了）
+// 以后在这里写更新日志的展示逻辑（内容格式待定）。
+// 现在界面是空的占位页，所以只剩一个构造函数。
 // ═══════════════════════════════════════════════════════════════════════════
 using System.Windows.Controls;
 
 namespace 炒股小助手
 {
-    public partial class SettingsPage : UserControl
+    public partial class UpdateLogPage : UserControl
     {
-        public SettingsPage()
+        public UpdateLogPage()
         {
-            InitializeComponent();
+            InitializeComponent(); // 把本页 XAML 实例化（每页构造函数都固定有这句）
         }
     }
 }

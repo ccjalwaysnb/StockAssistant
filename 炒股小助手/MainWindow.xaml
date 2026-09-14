@@ -60,6 +60,7 @@
                     <Button x:Name="StatsBtn"     Content="当日统计" Style="{StaticResource NavBtn}" Click="StatsBtn_Click"/>
                     <Button x:Name="GuideBtn"     Content="操作教程" Style="{StaticResource NavBtn}" Click="GuideBtn_Click"/>
                     <Button x:Name="SettingsBtn"  Content="设置"     Style="{StaticResource NavBtn}" Click="SettingsBtn_Click"/>
+                    <Button x:Name="UpdateLogBtn" Content="更新日志" Style="{StaticResource NavBtn}" Click="UpdateLogBtn_Click"/>
                     <!-- 每个按钮做了两件事：
                          ① Style 引用 App.xaml 里的 NavBtn（深色圆角外观）
                          ② Click 挂上事件 → 点按钮就在代码里切页面 -->

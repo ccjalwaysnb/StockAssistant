@@ -46,6 +46,7 @@ namespace 炒股小助手
         private readonly DailyStatsPage dailyStatsPage = new DailyStatsPage();
         private readonly GuidePage guidePage = new GuidePage();
         private readonly SettingsPage settingsPage = new SettingsPage();
+        private readonly UpdateLogPage updateLogPage = new UpdateLogPage();
 
         // ── 缓存文件 ───────────────────────────────────────────────────
         // UserCacheScan 会把"桌面上 UserCache.json 的完整路径"算出来存这里，
@@ -212,6 +213,7 @@ namespace 炒股小助手
         private void StatsBtn_Click(object sender, RoutedEventArgs e) => SwitchTo(StatsBtn, dailyStatsPage);
         private void GuideBtn_Click(object sender, RoutedEventArgs e) => SwitchTo(GuideBtn, guidePage);
         private void SettingsBtn_Click(object sender, RoutedEventArgs e) => SwitchTo(SettingsBtn, settingsPage);
+        private void UpdateLogBtn_Click(object sender, RoutedEventArgs e) => SwitchTo(UpdateLogBtn, updateLogPage);
 
         // 切页核心：btn = 刚点下的按钮；page = 要显示的页面
         private void SwitchTo(Button btn, UserControl page)
