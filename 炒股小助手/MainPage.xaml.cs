@@ -168,13 +168,19 @@ namespace 炒股小助手
                         // 刚跨分钟的时候，接口往往还没把新那一分钟的 K 线发布出来 → 先等半秒再拉
                         await Task.Delay(TimeSpan.FromMilliseconds(500));
 
-                        await FetchMinuteKAsync();         // 拉分钟K（G 区）
-                        RefreshTimeBar();                  // 实时区"分钟K"那格跟着更新（E 区）
+                        // 拉到就刷图；没拉到就什么都不做（图上留着同一只标的的旧数据，不动它）。
+                        // 【重点】不管成没成，这一分钟都算"处理过了"（见下面那行）——
+                        // 所以不会在同一分钟里反复重试，网络差的时候也不会把请求打爆。
+                        // 想手动补一次就点搜索键；不点就等下一分钟，心跳自己会来。
+                        if (await FetchMinuteKAsync())     // 拉分钟K（G 区）
+                        {
+                            RefreshTimeBar();                  // 实时区"分钟K"那格跟着更新（E 区）
 
-                        // 灌新数据但【不重置视图】：自动刷新时不能把用户当前的缩放和位置顶掉
-                        KChartMin.SetData(MinuteCandles, resetView: false);
+                            // 灌新数据但【不重置视图】：自动刷新时不能把用户当前的缩放和位置顶掉
+                            KChartMin.SetData(MinuteCandles, resetView: false);
+                        }
 
-                        tentimeMin = TenMinute;            // 拉完了 → c 也记成旧值
+                        tentimeMin = TenMinute;            // 不管成没成，这一分钟都算处理过了
                     }
                 }
             };
@@ -321,23 +327,49 @@ namespace 炒股小助手
         // 以前这里是"程序打开时自动拉一次 + 用 kLoaded 挡重复"，因为标的写死是 159248；
         // 现在标的跟着搜索走，没有默认标的，所以那个自动触发和 kLoaded 一起去掉了。
 
-        // 拉一次日K + 分钟K，分别灌进两张图；中途顺手刷实时区。
-        // 顺序是：先 SetEmptyText（"加载中…"）→ 拉 → 空就改成"没拉到数据"→ 才 SetData。
-        // 之所以能这么写，是因为拉取失败时列表不会被清空（Clear 都在解析成功之后），
-        // 图会保留上一次成功的数据，不会突然变空白。
+        // 搜索时"先清空、再按拉到的结果画"：
+        //   ① 先把两张 K 图的数据和时间全清掉，图上显示"加载中…"；
+        //   ② 再去拉：拉到了就正常画，没拉到就把提示换成"获取失败"。
+        // 这样做的好处是从根上避免了"上一只的 K 线留在图上冒充新标的"——
+        // 不用去分辨哪些数据是旧的，反正开始画之前图里一定是空的。
+        // （心跳那条路径不一样：标的没变，拉失败就留旧图，见 C 区。）
         private async Task LoadKChartsAsync()
         {
-            KChartDay.SetEmptyText("日K 加载中…");
-            await FetchDailyKAsync();                                    // ③ 拉日K
-            RefreshTimeBar();                                            // 实时区"日K"先刷出来
-            if (DailyCandles.Count == 0) KChartDay.SetEmptyText("日K 没拉到数据");
-            KChartDay.SetData(DailyCandles);                             // 灌进日K 图
+            // ── ① 先清空 ──
+            DailyCandles.Clear();
+            MinuteCandles.Clear();
+            dailyTime = null;      // 实时区"日K"那格跟着回到 --
+            minuteTime = null;     // 实时区"分钟K"那格跟着回到 --
 
+            KChartDay.SetEmptyText("日K 加载中…");
+            KChartDay.SetData(DailyCandles);          // 灌空列表 → 图上显示"日K 加载中…"
             KChartMin.SetEmptyText("分钟K 加载中…");
-            await FetchMinuteKAsync();                                   // ④ 拉当日每分钟K
+            KChartMin.SetData(MinuteCandles);         // 灌空列表 → 图上显示"分钟K 加载中…"
+            RefreshTimeBar();
+
+            // ── ② 日K：拉到就画，没拉到就在图上写"获取失败" ──
+            if (await FetchDailyKAsync())
+            {
+                KChartDay.SetData(DailyCandles);                         // 灌进日K 图
+            }
+            else
+            {
+                KChartDay.SetEmptyText("日K 获取失败");
+                KChartDay.SetData(DailyCandles);                         // 列表还是空的 → 图上就显示那行字
+            }
+            RefreshTimeBar();                                            // 实时区"日K"刷一下
+
+            // ── ③ 分钟K：同样处理 ──
+            if (await FetchMinuteKAsync())
+            {
+                KChartMin.SetData(MinuteCandles);                        // 灌进分钟K 图
+            }
+            else
+            {
+                KChartMin.SetEmptyText("分钟K 获取失败");
+                KChartMin.SetData(MinuteCandles);
+            }
             RefreshTimeBar();                                            // 实时区"分钟K"再刷
-            if (MinuteCandles.Count == 0) KChartMin.SetEmptyText("分钟K 没拉到数据");
-            KChartMin.SetData(MinuteCandles);                            // 灌进分钟K 图
         }
 
         // 两个切换按钮（日K / 分钟K）：只是切显隐，不重新拉数据
@@ -429,35 +461,55 @@ namespace 炒股小助手
         // ── 拉数据② 日K：拉历史每日（qfq 前复权）→ DailyCandles ──
         // 每行格式：[日期, 开, 收, 高, 低, 量]
         // 标的用 TenNumber（前缀 + 搜索框输入），不是写死的代码。
-        private async Task FetchDailyKAsync()
+        // 返回值 = 这次到底拉到没有：调用方靠它决定"要不要把上一只的数据清掉"。
+        private async Task<bool> FetchDailyKAsync()
         {
-            if (string.IsNullOrEmpty(TenNumber)) return;   // 还没搜过 → 没标的可拉，直接不发请求
+            if (string.IsNullOrEmpty(TenNumber)) return false;   // 还没搜过 → 没标的可拉，直接不发请求
             try
             {
                 string url = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?" +
-                             $"param={TenNumber},day,,,320,qfq";   // 320 根够覆盖全历史（这只 ETF 共 278 根）
+                             $"param={TenNumber},day,,,320,qfq";   // 320 根够覆盖全历史
                 string json = await http.GetStringAsync(url);
                 using var doc = JsonDocument.Parse(json);
-                var arr = doc.RootElement.GetProperty("data").GetProperty(TenNumber).GetProperty("day");
+
+                // 注意：数组的名字不一定叫 day！
+                //   需要前复权的（有分红送转的股票）返回的是 qfqday，
+                //   不需要复权的（ETF 之类）才叫 day —— 两种都得认，否则股票会解析失败。
+                JsonElement node = doc.RootElement.GetProperty("data").GetProperty(TenNumber);
+                JsonElement arr = PickKArray(node);
 
                 DailyCandles.Clear();
                 foreach (var row in arr.EnumerateArray())
                     DailyCandles.Add(ToCandle(row, "yyyy-MM-dd"));
 
-                // 实时区"日K"那格：取最后一根（最新那天）的日期。
-                // DailyCandles 是"先 Clear 再逐根 Add"，所以拉失败时这里不会执行，
-                // 界面上的旧时间和旧 K 线保持一致，不会出现"时间变了但图还是旧的"。
+                // 实时区"日K"那格：取最后一根（最新那天）的日期
                 if (DailyCandles.Count > 0) dailyTime = DailyCandles[^1].Date;
+
+                return DailyCandles.Count > 0;
             }
-            catch { }
+            catch { return false; }
+        }
+
+        // 从接口返回的 data[代码] 里挑出 K 线数组：
+        //   前复权请求下，需要复权的标的是 qfqday，不需要复权的（ETF）是 day，后复权是 hfqday。
+        // 按 qfqday → day → hfqday 的顺序找，找到第一个数组就返回；都没有就抛异常（由上层 catch 兜住）。
+        private static JsonElement PickKArray(JsonElement node)
+        {
+            foreach (string key in new[] { "qfqday", "day", "hfqday" })
+            {
+                if (node.TryGetProperty(key, out JsonElement arr) && arr.ValueKind == JsonValueKind.Array)
+                    return arr;
+            }
+            throw new Exception("接口返回里没有 K 线数组（qfqday / day / hfqday 都没找到）");
         }
 
         // ── 拉数据③ 当日每分钟K：拉 m1 → MinuteCandles ──
         // 每行格式：[时间 yyyyMMddHHmm, 开, 收, 高, 低, 量, {}, 额]
         // 注意：m1 会跨天返回（实测 400 根里含前两天），所以只保留最后一天 = "当日"
-        private async Task FetchMinuteKAsync()
+        // 返回值同上：拉到没有。
+        private async Task<bool> FetchMinuteKAsync()
         {
-            if (string.IsNullOrEmpty(TenNumber)) return;   // 还没搜过 → 没标的可拉
+            if (string.IsNullOrEmpty(TenNumber)) return false;   // 还没搜过 → 没标的可拉
             try
             {
                 string url = "https://ifzq.gtimg.cn/appstock/app/kline/mkline?" +
@@ -477,8 +529,10 @@ namespace 炒股小助手
 
                 // 实时区"分钟K"那格：取最后一根（最新那一分钟）的时间
                 if (MinuteCandles.Count > 0) minuteTime = MinuteCandles[^1].Date;
+
+                return MinuteCandles.Count > 0;
             }
-            catch { }
+            catch { return false; }
         }
 
         // 一个 K 线行（JSON 数组）→ 一根 K 线：下标 0=时间/日期 1=开 2=收 3=高 4=低
@@ -595,8 +649,10 @@ namespace 炒股小助手
             await PanGet();             // 盘口：拉数据 + 填盘口图（D 区）
             await LoadKChartsAsync();   // 日K + 分钟K：全量拉一遍（F 区）
 
-            // 三个数据都刚拉过 → 两对时间戳全记成旧值
+            // 盘口刚拉过 → b 记成旧值
             tentime = TenSecond;
+            // 分钟K 这里不管拉到没拉到都记成旧值 —— 跟心跳一个道理：
+            // 失败了不在当前这一分钟内反复重试；想补就再点一次搜索，或者等下一分钟心跳自己来。
             tentimeMin = TenMinute;
         }
 
