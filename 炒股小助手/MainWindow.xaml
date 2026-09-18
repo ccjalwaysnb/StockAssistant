@@ -1,58 +1,58 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <!-- ═══════════════════════════════════════════════════════════════════════════
-     MainWindow.xaml —— 主窗口（整个程序的"外壳"）
+     MainWindow.xaml —— 主窗口（整个程序的外壳）
 
-     窗口里叠放了两层内容（Grid 里后写的盖在先写的上面）：
-       第一层 MainUi（主界面）＝ 左侧 150px 导航栏（6 个按钮）+ 右侧页面区。
-                               初始 Visibility="Collapsed"（藏起来，启动时看不见）
-       第二层 LoadingLayer（加载层）＝ 全黑背景，正中央显示"正在加载中"。
-                               初始可见 → 程序一打开看到的就是它
+     窗口里叠放两层（Grid 里后写的盖在先写的上面）：
+       第一层 MainUi（主界面）＝ 左侧 150px 导航栏（7 个按钮）+ 右侧页面区，
+                               初始 Collapsed（藏起来，启动时看不见）
+       第二层 LoadingLayer（加载层）＝ 全黑背景 + 正中央"正在加载中"，
+                               初始可见，程序一打开看到的就是它
 
-     启动流程（代码在 MainWindow.xaml.cs）：
-       Window_Loaded → Loading() 确认加载层显示
-                     → MainCache() 缓存检查（桌面 UserCache.json）
-                     → 输出 true 才 UIMake()：收掉加载层、亮出 MainUi
+     启动流程（2026-09-16 起搬到程序入口 App.xaml.cs 的 MainFlow）：
+       ① new MainWindow() + Show()   → 看到的就是这里的 LoadingLayer
+       ② CheckCache()                → 检查桌面 UserCache.json
+       ③ ShowMainUi()                → 收掉 LoadingLayer、亮出 MainUi
+       ④ StartHeartbeat()            → 启动 0.5 秒心跳
+     所以这个文件里【没有】Loaded 事件：窗口不再自己跑启动流程。
      ═══════════════════════════════════════════════════════════════════════════ -->
 
-<!-- ⚠ 补充说明：XAML 里给"开始标签内部"写注释是不合法的（会把解析器搞晕），
-     所以下面所有开始标签的属性区一律不写注释，说明全部放在标签外面 -->
+<!-- 注：XAML 开始标签的属性区里不能写注释，所以说明一律放在标签外面 -->
 
 <Window x:Class="炒股小助手.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="股票小助手.v1"
+        Title="股票小助手.v1.0"
         Height="620" Width="960" MinHeight="480" MinWidth="760"
         WindowStartupLocation="CenterScreen"
         FontFamily="Microsoft YaHei UI, Microsoft YaHei"
         FontSize="14"
         Background="#FF111111"
-        Foreground="White"
-        Loaded="Window_Loaded">
+        Foreground="White">
     <!-- 窗口级设置说明：
          Background = 窗口底色（黑 #111111，程序整体黑底）
-         Foreground = 前景色默认值（白）：TextBlock 等控件会"继承"这个颜色
+         Foreground = 前景色默认值（白），TextBlock 等控件会继承这个颜色
          FontFamily = 全局字体用微软雅黑，中文显示更整齐
          Loaded     = 窗口显示完成后触发 → 去代码里跑启动流程 -->
 
-    <!-- 窗口的"内容总容器"：里面叠两层 -->
+    <!-- 内容总容器：里面叠两层 -->
     <Grid>
 
         <!-- ═══════════════ 第一层：主界面（初始隐藏） ═══════════════ -->
-        <!-- Visibility="Collapsed"：不占空间也不显示，等 UIMake() 里把它改回 Visible -->
+        <!-- Collapsed：不占空间也不显示，等 ShowMainUi() 把它改回 Visible -->
         <Grid x:Name="MainUi" Visibility="Collapsed">
             <Grid.ColumnDefinitions>
-                <!-- 列宽写法：150 = 固定 150 像素；* = "吃掉剩下的全部空间"。
-                     窗口被拉伸时 150 不动、右列跟着变宽 -->
+                <!-- 列宽：150 = 固定 150 像素；* = 占满剩余空间
+                     （窗口拉伸时左列不动、右列跟着变宽） -->
                 <ColumnDefinition Width="150"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
             <!-- ── 左列：导航栏 ── -->
-            <!-- Border = 自带边框/背景的容器。这里只画右侧 1px 深灰竖线，把两区分开 -->
+            <!-- 只画右侧 1px 深灰竖线，把导航区和页面区分开 -->
             <Border Grid.Column="0" Background="#FF1C1C1C"
                     BorderBrush="#FF333333" BorderThickness="0,0,1,0">
-                <!-- NavPanel：6 个导航按钮都装在这里。
-                     给面板取名字，是因为切页代码要遍历它的子控件做"互斥高亮" -->
+                <!-- NavPanel：导航按钮都装在这里。
+                     取名字是因为切页时要遍历它的子控件做"互斥高亮" -->
                 <StackPanel x:Name="NavPanel" Margin="12,16,12,0">
                     <Button x:Name="MainBtn"      Content="主界面"   Style="{StaticResource NavBtn}" Click="MainBtn_Click"/>
                     <Button x:Name="WatchlistBtn" Content="自选股"   Style="{StaticResource NavBtn}" Click="WatchlistBtn_Click"/>
@@ -61,21 +61,17 @@
                     <Button x:Name="GuideBtn"     Content="操作教程" Style="{StaticResource NavBtn}" Click="GuideBtn_Click"/>
                     <Button x:Name="SettingsBtn"  Content="设置"     Style="{StaticResource NavBtn}" Click="SettingsBtn_Click"/>
                     <Button x:Name="UpdateLogBtn" Content="更新日志" Style="{StaticResource NavBtn}" Click="UpdateLogBtn_Click"/>
-                    <!-- 每个按钮做了两件事：
-                         ① Style 引用 App.xaml 里的 NavBtn（深色圆角外观）
-                         ② Click 挂上事件 → 点按钮就在代码里切页面 -->
+                    <!-- 每个按钮：Style 引用 App.xaml 的 NavBtn，Click 挂上切页事件 -->
                 </StackPanel>
             </Border>
 
             <!-- ── 右列：页面区 ── -->
-            <!-- ContentControl：一次只能"装一个孩子"的容器。
-                 换页面 = 换它的 Content（代码里写 PageHost.Content = 某个页面） -->
+            <!-- ContentControl 一次只放一个内容：换页面 = 换它的 Content -->
             <ContentControl x:Name="PageHost" Grid.Column="1"/>
         </Grid>
 
         <!-- ═══════════════ 第二层：加载层（默认盖在最上面） ═══════════════ -->
-        <!-- 背景纯黑 + 正中央一行"正在加载中"（白字）。
-             因为是后声明的，所以它盖在 MainUi 之上 —— 启动时用户只看到它 -->
+        <!-- 后声明所以它盖在 MainUi 之上：启动时只看到这一层 -->
         <Grid x:Name="LoadingLayer" Background="#FF111111">
             <TextBlock Text="正在加载中"
                        FontSize="22"

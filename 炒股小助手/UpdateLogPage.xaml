@@ -1,15 +1,98 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <!-- ═══════════════════════════════════════════════════════════════════════════
-     UpdateLogPage.xaml —— "更新日志"页面
+     UpdateLogPage.xaml —— "更新日志"页
 
-     定位：以后用来记录这个程序的版本更新内容（写什么待定，先占位）。
+     一条版本 = 一行标题（版本号 + 更新时间，点一下展开 / 收起）+ 下面一块内容。
+     做法：标题是一个 Button（Tag 里写着"要控制哪一块内容"），内容是一个 Border，
+           点标题时由代码把内容的 Visibility 在 Visible / Collapsed 之间来回切（见 .xaml.cs）。
+
+     以后加新版本：照着下面 v1.0 这一组复制一份，改三处名字就行 ——
+       Header2 / Body2 / Arrow2（Tag 里也改成 Body2）。
      ═══════════════════════════════════════════════════════════════════════════ -->
 <UserControl x:Class="炒股小助手.UpdateLogPage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <UserControl.Resources>
+        <!-- 版本标题行的样式：跟全局 BtnDark 一个风格，但内容靠左（BtnDark 的模板是居中的） -->
+        <Style x:Key="VersionHeaderBtn" TargetType="Button">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Background" Value="#FF1C1C1C"/>
+            <Setter Property="Margin" Value="0,14,0,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}"
+                                BorderBrush="#FF2A2A2A" BorderThickness="1"
+                                CornerRadius="4" Padding="14,8">
+                            <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <!-- 鼠标悬停提亮一点，给个"这一行可以点"的反馈 -->
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#FF262626"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
     <Grid Background="#FF111111">
-        <TextBlock Text="更新日志页面（内容待填充）"
-                   Foreground="#FF7A7A7A" FontSize="15"
-                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="28,24,28,28">
+
+                <TextBlock Text="更新日志" FontSize="20" FontWeight="Bold" Foreground="White"/>
+                <TextBlock Text="点版本号那一行可以展开 / 收起" FontSize="12"
+                           Foreground="#FF8A8A8A" Margin="0,8,0,0"/>
+
+                <!-- ═══════════ v1.0 ═══════════ -->
+                <Button x:Name="Header1" Tag="Body1" Style="{StaticResource VersionHeaderBtn}"
+                        Click="VersionHeader_Click">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock x:Name="Arrow1" Text="▼" FontSize="12"
+                                   Foreground="#FF8A8A8A" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                        <TextBlock Text="v1.0" FontSize="16" FontWeight="Bold"
+                                   Foreground="White" VerticalAlignment="Center"/>
+                        <TextBlock Text="2026.9.19" FontSize="13" Foreground="#FF9A9A9A"
+                                   VerticalAlignment="Center" Margin="18,0,0,0"/>
+                    </StackPanel>
+                </Button>
+
+                <Border x:Name="Body1" Visibility="Visible"
+                        Background="#FF1A1A1A" BorderBrush="#FF2A2A2A" BorderThickness="1"
+                        CornerRadius="4" Padding="18,14" Margin="0,6,0,0">
+                    <StackPanel>
+                        <TextBlock Text="第一个正式版。" FontSize="14" FontWeight="Bold"
+                                   Foreground="White" TextWrapping="Wrap"/>
+
+                        <TextBlock FontSize="13" Foreground="#FFB0B0B0" TextWrapping="Wrap"
+                                   Margin="0,12,0,0" LineHeight="22"
+                                   Text="· 市场与搜索：沪市 / 深市 / 美股 / 美股2（指数）；输入代码后按回车或点搜索即可查询，带 5 秒冷却。"/>
+                        <TextBlock FontSize="13" Foreground="#FFB0B0B0" TextWrapping="Wrap"
+                                   Margin="0,6,0,0" LineHeight="22"
+                                   Text="· 实时盘口：现价、涨跌、今开、开盘较昨收、最高、最低、成交量、成交额、换手率。"/>
+                        <TextBlock FontSize="13" Foreground="#FFB0B0B0" TextWrapping="Wrap"
+                                   Margin="0,6,0,0" LineHeight="22"
+                                   Text="· 五档盘口表：买量 · 买价 · 档位 · 卖价 · 卖量 一表对照（A股有数据，美股接口不提供五档）。"/>
+                        <TextBlock FontSize="13" Foreground="#FFB0B0B0" TextWrapping="Wrap"
+                                   Margin="0,6,0,0" LineHeight="22"
+                                   Text="· K 线图：日K（前复权）与当日分钟K；鼠标悬停看单根数据（开/收/高/低/时间），Ctrl+滚轮缩放，方向键平移。"/>
+                        <TextBlock FontSize="13" Foreground="#FFB0B0B0" TextWrapping="Wrap"
+                                   Margin="0,6,0,0" LineHeight="22"
+                                   Text="· 自动更新：0.5 秒查一次盘口数据时间戳，变了才拉数据；分钟K 在跨分钟时自动更新。"/>
+                        <TextBlock FontSize="13" Foreground="#FFB0B0B0" TextWrapping="Wrap"
+                                   Margin="0,6,0,0" LineHeight="22"
+                                   Text="· 实时区：K 图下方显示盘口 / 日K / 分钟K 三个数据时间。"/>
+                        <TextBlock FontSize="13" Foreground="#FFB0B0B0" TextWrapping="Wrap"
+                                   Margin="0,6,0,0" LineHeight="22"
+                                   Text="· 启动自检：启动时检查桌面 UserCache.json，通过后才进入主界面。"/>
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
     </Grid>
 </UserControl>

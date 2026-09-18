@@ -2,13 +2,16 @@
 <!-- ═══════════════════════════════════════════════════════════════════════════
      MainPage.xaml —— "主界面"页
 
-     从上到下四块（紧凑排布，目标是窗口默认大小时不用上下滑动）：
-       ① 标题（股票小助手.v0.9 先导测试版）
+     从上到下五块（紧凑排布，目标是窗口默认大小时不用上下滑动）：
+       ① 标题（股票小助手.v1.0 正式版）
        ② 搜索行：市场按钮 + 输入框(SearchBox) + 搜索按钮
-       ③ 行情区：报价行（名称/代码/现价/涨跌）+ 指标行（7 格）+ 盘口（卖五档 | 买五档）
-       ④ K 线图（CandleChart 控件，高度由这里给；数据暂为控件内置的测试数据）
+       ③ 报价行：名称 / 代码 / 现价 / 涨跌额 / 涨跌幅（居中一行）
+       ④ 行情双栏区（2026-09-18 改版）：
+            左半 = 指标面板（今开+涨跌 / 最高+最低 / 量·额·换手，共 3 行）
+            右半 = 五档盘口表（一个框：买量 · 买价 · 档位号 · 卖价 · 卖量）
+       ⑤ K 线图 + 实时区（CandleChart 控件，高度由这里给，数据由代码灌进去）
 
-     所有数值 TextBlock 都取了 x:Name，数据来了由代码(MainPage.xaml.cs)逐个填。
+     所有数值 TextBlock 都取了 x:Name，数据来了由代码（MainPage.xaml.cs）逐个填。
      ═══════════════════════════════════════════════════════════════════════════ -->
 <UserControl x:Class="炒股小助手.MainPage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -22,7 +25,7 @@
         </Grid.RowDefinitions>
 
         <!-- ═══════════════ ① 标题 ═══════════════ -->
-        <TextBlock Grid.Row="0" Text="股票小助手.v0.9  先导测试版"
+        <TextBlock Grid.Row="0" Text="股票小助手.v1.0  正式版"
                    FontSize="22" FontWeight="Bold"
                    Foreground="White"
                    HorizontalAlignment="Center"
@@ -40,23 +43,24 @@
                     Style="{StaticResource SearchBtn}" Width="Auto" Padding="14,0"
                     Click="MarketBtn_Click"/>
 
-            <!-- 输入框：现在按主人的设计，只填"纯数字代码"（如 159248），
-                 带 sh/sz/us 前缀的完整代码由程序按所选市场自动拼 -->
+            <!-- 输入框：只填纯数字代码（如 159248），
+                 带 sh/sz/us/us. 前缀的完整代码由程序按所选市场自动拼。
+                 美股指数（道琼斯 DJI、纳斯达克 IXIC 等）就填指数代码，选"美股2" -->
             <TextBox x:Name="SearchBox"
                      Width="240" Height="30" FontSize="14"
                      VerticalContentAlignment="Center"
+                     KeyDown="SearchBox_KeyDown"
                      Margin="10,0,0,0"/>
-            <!-- 搜索按钮：点击触发 Search_Click —— 它最优先检查 MarketMode，
-                 没选市场就弹"请先选择市场"，选了才拼前缀、过冷却限制器再去查。
-                 x:Name = SearchButton：冷却倒计时时要把它的字改成数字 -->
+            <!-- 搜索按钮：触发 Search_Click。先检查 MarketMode，没选市场就弹提示；
+                 选了才拼代码、过冷却限制再去查。
+                 x:Name = SearchButton：冷却倒计时期间要把它的字改成数字 -->
             <Button x:Name="SearchButton"
                     Content="搜索"
                     Style="{StaticResource SearchBtn}"
                     Margin="10,0,0,0"
                     Click="Search_Click"/>
 
-            <!-- 市场下拉列表：一个浮动层（Popup），平时隐藏；
-                 点"市场"按钮弹出，点选项后自动收起。
+            <!-- 市场下拉列表：Popup 浮动层，平时隐藏，点"市场"按钮弹出、选中后收起。
                  PlacementTarget 让它对准市场按钮，Placement=Bottom 让它出现在按钮正下方 -->
             <Popup x:Name="MarketPopup"
                    PlacementTarget="{Binding ElementName=MarketBtn}"
@@ -73,217 +77,236 @@
                                 Margin="0,4,0,0" Click="MktShenzhen_Click"/>
                         <Button Content="美股" Style="{StaticResource SearchBtn}" Width="Auto" Padding="14,0"
                                 Margin="0,4,0,0" Click="MktUS_Click"/>
+                        <!-- 美股2：腾讯接口里美股指数的写法是 us. + 指数代码（us.DJI 道琼斯 / us.IXIC 纳斯达克 /
+                             us.INX 标普500 / us.NDX 纳斯达克100）。实测 us.AAPL 这类个股写法不存在，
+                             所以这一项专门留给指数用。 -->
+                        <Button Content="美股2" Style="{StaticResource SearchBtn}" Width="Auto" Padding="14,0"
+                                Margin="0,4,0,0" Click="MktUS2_Click"/>
                     </StackPanel>
                 </Border>
             </Popup>
         </StackPanel>
 
         <!-- ═══════════════ ③④ 行情区 + K 线图 ═══════════════ -->
-        <!-- ScrollViewer：万一窗口被拉得很矮，还能上下滚动，不至于把内容挤没 -->
+        <!-- ScrollViewer：窗口拉得很矮时还能上下滚动，不至于把内容挤没 -->
         <ScrollViewer Grid.Row="2" Margin="22,10,22,8"
                       VerticalScrollBarVisibility="Auto">
             <StackPanel>
 
-                <!-- ── 报价行：名称 代码 现价 涨跌额 涨跌幅 ── -->
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                    <TextBlock x:Name="qName" Text="—" FontSize="22" FontWeight="Bold"
-                               Foreground="White" VerticalAlignment="Center"/>
-                    <TextBlock x:Name="qCode" Text="" FontSize="12" Foreground="#FF9A9A9A"
-                               Margin="8,0,0,0" VerticalAlignment="Bottom"/>
-                    <TextBlock x:Name="qPrice" Text="--" FontSize="22" FontFamily="Consolas"
-                               Foreground="#FF9A9A9A" Margin="24,0,0,0" VerticalAlignment="Center"/>
-                    <TextBlock x:Name="qChange" Text="--" FontSize="13" FontFamily="Consolas"
-                               Foreground="#FF9A9A9A" Margin="12,0,0,4" VerticalAlignment="Bottom"/>
-                    <TextBlock x:Name="qChangePct" Text="--" FontSize="13" FontFamily="Consolas"
-                               Foreground="#FF9A9A9A" Margin="8,0,0,4" VerticalAlignment="Bottom"/>
-                </StackPanel>
-                <!-- 注：现价/涨跌额/涨跌幅的颜色由代码控制：涨=红、跌=绿（A股习惯） -->
-
-                <!-- ── 指标行：一行 7 个小格（标签在上 数值在下） ── -->
-                <Grid Margin="0,10,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/><ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="*"/><ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="*"/><ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-
-                    <!-- 每个小格是同一套结构：Border 画框 → 里面"标签 + 数值" -->
-                    <Border Background="#FF1A1A1A" BorderBrush="#FF2A2A2A"
-                            BorderThickness="1" CornerRadius="3" Padding="8,4" Margin="0,0,6,0">
-                        <StackPanel>
-                            <TextBlock Text="今开" FontSize="10" Foreground="#FF8A8A8A"/>
-                            <TextBlock x:Name="qOpen" Text="--" FontFamily="Consolas" FontSize="12"
-                                       Foreground="White" Margin="0,2,0,0"/>
-                        </StackPanel>
-                    </Border>
-                    <Border Grid.Column="1" Background="#FF1A1A1A" BorderBrush="#FF2A2A2A"
-                            BorderThickness="1" CornerRadius="3" Padding="8,4" Margin="0,0,6,0">
-                        <StackPanel>
-                            <TextBlock Text="昨收" FontSize="10" Foreground="#FF8A8A8A"/>
-                            <TextBlock x:Name="qPreClose" Text="--" FontFamily="Consolas" FontSize="12"
-                                       Foreground="White" Margin="0,2,0,0"/>
-                        </StackPanel>
-                    </Border>
-                    <Border Grid.Column="2" Background="#FF1A1A1A" BorderBrush="#FF2A2A2A"
-                            BorderThickness="1" CornerRadius="3" Padding="8,4" Margin="0,0,6,0">
-                        <StackPanel>
-                            <TextBlock Text="最高" FontSize="10" Foreground="#FF8A8A8A"/>
-                            <TextBlock x:Name="qHigh" Text="--" FontFamily="Consolas" FontSize="12"
-                                       Foreground="White" Margin="0,2,0,0"/>
-                        </StackPanel>
-                    </Border>
-                    <Border Grid.Column="3" Background="#FF1A1A1A" BorderBrush="#FF2A2A2A"
-                            BorderThickness="1" CornerRadius="3" Padding="8,4" Margin="0,0,6,0">
-                        <StackPanel>
-                            <TextBlock Text="最低" FontSize="10" Foreground="#FF8A8A8A"/>
-                            <TextBlock x:Name="qLow" Text="--" FontFamily="Consolas" FontSize="12"
-                                       Foreground="White" Margin="0,2,0,0"/>
-                        </StackPanel>
-                    </Border>
-                    <Border Grid.Column="4" Background="#FF1A1A1A" BorderBrush="#FF2A2A2A"
-                            BorderThickness="1" CornerRadius="3" Padding="8,4" Margin="0,0,6,0">
-                        <StackPanel>
-                            <TextBlock Text="成交量" FontSize="10" Foreground="#FF8A8A8A"/>
-                            <TextBlock x:Name="qVol" Text="--" FontFamily="Consolas" FontSize="12"
-                                       Foreground="White" Margin="0,2,0,0"/>
-                        </StackPanel>
-                    </Border>
-                    <Border Grid.Column="5" Background="#FF1A1A1A" BorderBrush="#FF2A2A2A"
-                            BorderThickness="1" CornerRadius="3" Padding="8,4" Margin="0,0,6,0">
-                        <StackPanel>
-                            <TextBlock Text="成交额" FontSize="10" Foreground="#FF8A8A8A"/>
-                            <TextBlock x:Name="qAmt" Text="--" FontFamily="Consolas" FontSize="12"
-                                       Foreground="White" Margin="0,2,0,0"/>
-                        </StackPanel>
-                    </Border>
-                    <Border Grid.Column="6" Background="#FF1A1A1A" BorderBrush="#FF2A2A2A"
-                            BorderThickness="1" CornerRadius="3" Padding="8,4">
-                        <StackPanel>
-                            <TextBlock Text="换手率" FontSize="10" Foreground="#FF8A8A8A"/>
-                            <TextBlock x:Name="qTurnover" Text="--" FontFamily="Consolas" FontSize="12"
-                                       Foreground="White" Margin="0,2,0,0"/>
-                        </StackPanel>
-                    </Border>
-                </Grid>
-
-                <!-- ── 盘口区：左卖盘 右买盘，各 5 档 ── -->
+                <!-- ── 报价行（2026-09-18 改版）：名字靠最左、价格和涨跌靠最右，字体放大 ──
+                     三列：Auto（名字+代码） / *（中间留白） / Auto（现价+涨跌额+涨跌幅） -->
                 <Grid Margin="0,8,0,0">
                     <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- 右：名称 + 代码（都贴底对齐，跟左边的数字坐在同一条基线上） -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Bottom">
+                        <TextBlock x:Name="qName" Text="—" FontSize="28" FontWeight="Bold"
+                                   Foreground="White" VerticalAlignment="Bottom"/>
+                        <TextBlock x:Name="qCode" Text="" FontSize="13" Foreground="#FF9A9A9A"
+                                   Margin="10,0,0,4" VerticalAlignment="Bottom"/>
+                    </StackPanel>
+
+                    <!-- 左：现价 + 涨跌额 + 涨跌幅 -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Bottom">
+                        <TextBlock x:Name="qPrice" Text="--" FontSize="28" FontFamily="Consolas"
+                                   Foreground="#FF9A9A9A" VerticalAlignment="Bottom"/>
+                        <TextBlock x:Name="qChange" Text="--" FontSize="16" FontFamily="Consolas"
+                                   Foreground="#FF9A9A9A" Margin="14,0,0,5" VerticalAlignment="Bottom"/>
+                        <TextBlock x:Name="qChangePct" Text="--" FontSize="16" FontFamily="Consolas"
+                                   Foreground="#FF9A9A9A" Margin="10,0,0,5" VerticalAlignment="Bottom"/>
+                    </StackPanel>
+                </Grid>
+                <!-- 注：现价/涨跌额/涨跌幅的颜色由代码控制：涨=红、跌=绿（A股习惯） -->
+
+                <!-- ═══════════ 行情双栏区（2026-09-18 改版）═══════════
+                     左半 = 指标面板（3 行：今开+涨跌 / 最高+最低 / 量·额·换手）
+                     右半 = 五档盘口表（一个框，5 列：买量 · 买价 · 档位号 · 卖价 · 卖量）
+                     两栏各占一半宽度：盘口表缩到右边，原来空出来的左半边正好放指标。-->
+                <Grid Margin="0,20,0,0">
+                    <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
 
-                    <!-- 卖盘（五档）：每档单独一行小 Grid（46px 档位名 + 数值右对齐） -->
+                    <!-- ── 左：指标面板 ──
+                         三行都用 "*" 高度，让它跟右边的盘口表一样高，两栏看起来是一整块板子 -->
                     <Border Background="#FF1A1A1A" BorderBrush="#FF2A2A2A"
-                            BorderThickness="1" CornerRadius="3" Padding="12,6" Margin="0,0,6,0">
-                        <StackPanel>
-                            <TextBlock Text="卖盘（五档）" FontSize="11" Foreground="#FF8A8A8A"/>
-                            <Grid Margin="0,4,0,0">
+                            BorderThickness="1" CornerRadius="3" Padding="16,12" Margin="0,0,8,0">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- 第一行：今开（居左） + 开盘涨跌（开盘价较昨收的额和幅，涨红跌绿） -->
+                            <Grid Grid.Row="0" VerticalAlignment="Center">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="46"/>
+                                    <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="卖五" FontSize="12" Foreground="#FF8A8A8A" VerticalAlignment="Center"/>
-                                <TextBlock x:Name="s5" Grid.Column="1" FontFamily="Consolas" FontSize="12"
-                                           Foreground="#FF66BB6A" HorizontalAlignment="Right" Text="--"/>
+                                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                    <TextBlock Text="今开" FontSize="12" Foreground="#FF8A8A8A" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="qOpen" Text="--" FontFamily="Consolas" FontSize="14"
+                                               Foreground="White" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <TextBlock Text="较昨收" FontSize="12" Foreground="#FF8A8A8A" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="pChange" Text="--" FontFamily="Consolas" FontSize="14"
+                                               Foreground="#FF9A9A9A" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
                             </Grid>
-                            <Grid Margin="0,2,0,0">
+
+                            <!-- 第二行：最高 + 最低 -->
+                            <Grid Grid.Row="1" VerticalAlignment="Center">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="46"/>
+                                    <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="卖四" FontSize="12" Foreground="#FF8A8A8A" VerticalAlignment="Center"/>
-                                <TextBlock x:Name="s4" Grid.Column="1" FontFamily="Consolas" FontSize="12"
-                                           Foreground="#FF66BB6A" HorizontalAlignment="Right" Text="--"/>
+                                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                    <TextBlock Text="最高" FontSize="12" Foreground="#FF8A8A8A" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="qHigh" Text="--" FontFamily="Consolas" FontSize="14"
+                                               Foreground="White" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <TextBlock Text="最低" FontSize="12" Foreground="#FF8A8A8A" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="qLow" Text="--" FontFamily="Consolas" FontSize="14"
+                                               Foreground="White" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
                             </Grid>
-                            <Grid Margin="0,2,0,0">
+
+                            <!-- 第三行：成交量 + 成交额 + 换手率 -->
+                            <Grid Grid.Row="2" VerticalAlignment="Center">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="46"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="卖三" FontSize="12" Foreground="#FF8A8A8A" VerticalAlignment="Center"/>
-                                <TextBlock x:Name="s3" Grid.Column="1" FontFamily="Consolas" FontSize="12"
-                                           Foreground="#FF66BB6A" HorizontalAlignment="Right" Text="--"/>
+                                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                    <TextBlock Text="量" FontSize="12" Foreground="#FF8A8A8A" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="qVol" Text="--" FontFamily="Consolas" FontSize="14"
+                                               Foreground="White" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center">
+                                    <TextBlock Text="额" FontSize="12" Foreground="#FF8A8A8A" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="qAmt" Text="--" FontFamily="Consolas" FontSize="14"
+                                               Foreground="White" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <TextBlock Text="换手" FontSize="12" Foreground="#FF8A8A8A" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="qTurnover" Text="--" FontFamily="Consolas" FontSize="14"
+                                               Foreground="White" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
                             </Grid>
-                            <Grid Margin="0,2,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="46"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="卖二" FontSize="12" Foreground="#FF8A8A8A" VerticalAlignment="Center"/>
-                                <TextBlock x:Name="s2" Grid.Column="1" FontFamily="Consolas" FontSize="12"
-                                           Foreground="#FF66BB6A" HorizontalAlignment="Right" Text="--"/>
-                            </Grid>
-                            <Grid Margin="0,2,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="46"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="卖一" FontSize="12" Foreground="#FF8A8A8A" VerticalAlignment="Center"/>
-                                <TextBlock x:Name="s1" Grid.Column="1" FontFamily="Consolas" FontSize="12"
-                                           Foreground="#FF66BB6A" HorizontalAlignment="Right" Text="--"/>
-                            </Grid>
-                        </StackPanel>
+                        </Grid>
                     </Border>
 
-                    <!-- 买盘（五档） -->
+                    <!-- ── 右：五档盘口表 ──
+                         读法：左边是买（量 + 价）、右边是卖（价 + 量），中间那列数字是第几档。
+                         第 1 行 = 买一 / 卖一，往下到第 5 行 = 买五 / 卖五。
+                         颜色沿用 A股习惯：买盘红、卖盘绿。-->
                     <Border Grid.Column="1" Background="#FF1A1A1A" BorderBrush="#FF2A2A2A"
-                            BorderThickness="1" CornerRadius="3" Padding="12,6" Margin="6,0,0,0">
-                        <StackPanel>
-                            <TextBlock Text="买盘（五档）" FontSize="11" Foreground="#FF8A8A8A"/>
-                            <Grid Margin="0,4,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="46"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="买一" FontSize="12" Foreground="#FF8A8A8A" VerticalAlignment="Center"/>
-                                <TextBlock x:Name="b1" Grid.Column="1" FontFamily="Consolas" FontSize="12"
-                                           Foreground="#FFE57373" HorizontalAlignment="Right" Text="--"/>
-                            </Grid>
-                            <Grid Margin="0,2,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="46"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="买二" FontSize="12" Foreground="#FF8A8A8A" VerticalAlignment="Center"/>
-                                <TextBlock x:Name="b2" Grid.Column="1" FontFamily="Consolas" FontSize="12"
-                                           Foreground="#FFE57373" HorizontalAlignment="Right" Text="--"/>
-                            </Grid>
-                            <Grid Margin="0,2,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="46"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="买三" FontSize="12" Foreground="#FF8A8A8A" VerticalAlignment="Center"/>
-                                <TextBlock x:Name="b3" Grid.Column="1" FontFamily="Consolas" FontSize="12"
-                                           Foreground="#FFE57373" HorizontalAlignment="Right" Text="--"/>
-                            </Grid>
-                            <Grid Margin="0,2,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="46"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="买四" FontSize="12" Foreground="#FF8A8A8A" VerticalAlignment="Center"/>
-                                <TextBlock x:Name="b4" Grid.Column="1" FontFamily="Consolas" FontSize="12"
-                                           Foreground="#FFE57373" HorizontalAlignment="Right" Text="--"/>
-                            </Grid>
-                            <Grid Margin="0,2,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="46"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="买五" FontSize="12" Foreground="#FF8A8A8A" VerticalAlignment="Center"/>
-                                <TextBlock x:Name="b5" Grid.Column="1" FontFamily="Consolas" FontSize="12"
-                                           Foreground="#FFE57373" HorizontalAlignment="Right" Text="--"/>
-                            </Grid>
-                        </StackPanel>
+                            BorderThickness="1" CornerRadius="3" Padding="16,10" Margin="8,0,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/><!-- 买量 -->
+                                <ColumnDefinition Width="*"/><!-- 买价 -->
+                                <ColumnDefinition Width="26"/><!-- 档位号 -->
+                                <ColumnDefinition Width="*"/><!-- 卖价 -->
+                                <ColumnDefinition Width="*"/><!-- 卖量 -->
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/><!-- 表头 -->
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- 表头：量 / 买 / （中间留给档位号）/ 卖 / 量 -->
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="量" FontSize="11"
+                                       Foreground="#FF8A8A8A" HorizontalAlignment="Left"/>
+                            <TextBlock Grid.Row="0" Grid.Column="1" Text="买" FontSize="11"
+                                       Foreground="#FF8A8A8A" HorizontalAlignment="Right"/>
+                            <TextBlock Grid.Row="0" Grid.Column="3" Text="卖" FontSize="11"
+                                       Foreground="#FF8A8A8A" HorizontalAlignment="Left"/>
+                            <TextBlock Grid.Row="0" Grid.Column="4" Text="量" FontSize="11"
+                                       Foreground="#FF8A8A8A" HorizontalAlignment="Right"/>
+
+                            <!-- 第 1 档：买一 / 卖一 -->
+                            <TextBlock x:Name="bv1" Grid.Row="1" Grid.Column="0" Text="--" FontFamily="Consolas" FontSize="12"
+                                       Foreground="#FFE57373" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="bp1" Grid.Row="1" Grid.Column="1" Text="--" FontFamily="Consolas" FontSize="12"
+                                       Foreground="#FFE57373" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Row="1" Grid.Column="2" Text="1" FontFamily="Consolas" FontSize="11"
+                                       Foreground="#FF8A8A8A" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="sp1" Grid.Row="1" Grid.Column="3" Text="--" FontFamily="Consolas" FontSize="12"
+                                       Foreground="#FF66BB6A" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="sv1" Grid.Row="1" Grid.Column="4" Text="--" FontFamily="Consolas" FontSize="12"
+                                       Foreground="#FF66BB6A" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+
+                            <!-- 第 2 档：买二 / 卖二 -->
+                            <TextBlock x:Name="bv2" Grid.Row="2" Grid.Column="0" Text="--" FontFamily="Consolas" FontSize="12"
+                                       Foreground="#FFE57373" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="bp2" Grid.Row="2" Grid.Column="1" Text="--" FontFamily="Consolas" FontSize="12"
+                                       Foreground="#FFE57373" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Row="2" Grid.Column="2" Text="2" FontFamily="Consolas" FontSize="11"
+                                       Foreground="#FF8A8A8A" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="sp2" Grid.Row="2" Grid.Column="3" Text="--" FontFamily="Consolas" FontSize="12"
+                                       Foreground="#FF66BB6A" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="sv2" Grid.Row="2" Grid.Column="4" Text="--" FontFamily="Consolas" FontSize="12"
+                                       Foreground="#FF66BB6A" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+
+                            <!-- 第 3 档：买三 / 卖三 -->
+                            <TextBlock x:Name="bv3" Grid.Row="3" Grid.Column="0" Text="--" FontFamily="Consolas" FontSize="12"
+                                       Foreground="#FFE57373" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="bp3" Grid.Row="3" Grid.Column="1" Text="--" FontFamily="Consolas" FontSize="12"
+                                       Foreground="#FFE57373" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Row="3" Grid.Column="2" Text="3" FontFamily="Consolas" FontSize="11"
+                                       Foreground="#FF8A8A8A" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="sp3" Grid.Row="3" Grid.Column="3" Text="--" FontFamily="Consolas" FontSize="12"
+                                       Foreground="#FF66BB6A" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="sv3" Grid.Row="3" Grid.Column="4" Text="--" FontFamily="Consolas" FontSize="12"
+                                       Foreground="#FF66BB6A" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+
+                            <!-- 第 4 档：买四 / 卖四 -->
+                            <TextBlock x:Name="bv4" Grid.Row="4" Grid.Column="0" Text="--" FontFamily="Consolas" FontSize="12"
+                                       Foreground="#FFE57373" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="bp4" Grid.Row="4" Grid.Column="1" Text="--" FontFamily="Consolas" FontSize="12"
+                                       Foreground="#FFE57373" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Row="4" Grid.Column="2" Text="4" FontFamily="Consolas" FontSize="11"
+                                       Foreground="#FF8A8A8A" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="sp4" Grid.Row="4" Grid.Column="3" Text="--" FontFamily="Consolas" FontSize="12"
+                                       Foreground="#FF66BB6A" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="sv4" Grid.Row="4" Grid.Column="4" Text="--" FontFamily="Consolas" FontSize="12"
+                                       Foreground="#FF66BB6A" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+
+                            <!-- 第 5 档：买五 / 卖五 -->
+                            <TextBlock x:Name="bv5" Grid.Row="5" Grid.Column="0" Text="--" FontFamily="Consolas" FontSize="12"
+                                       Foreground="#FFE57373" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="bp5" Grid.Row="5" Grid.Column="1" Text="--" FontFamily="Consolas" FontSize="12"
+                                       Foreground="#FFE57373" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Row="5" Grid.Column="2" Text="5" FontFamily="Consolas" FontSize="11"
+                                       Foreground="#FF8A8A8A" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="sp5" Grid.Row="5" Grid.Column="3" Text="--" FontFamily="Consolas" FontSize="12"
+                                       Foreground="#FF66BB6A" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="sv5" Grid.Row="5" Grid.Column="4" Text="--" FontFamily="Consolas" FontSize="12"
+                                       Foreground="#FF66BB6A" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                        </Grid>
                     </Border>
                 </Grid>
 
                 <!-- ── K 线区：左侧两个切换按钮（日K / 分钟K），右侧图框 ──
-                     两张图叠在同一格里，靠显隐切换（切换逻辑在 MainPage.xaml.cs 的 ShowKChart）-->
-                <Grid Margin="0,8,0,0" Height="190">
+                     两张图叠在同一格里，靠显隐切换（切换逻辑在 MainPage.xaml.cs 的 ShowKChart）。
+                      Height 230：比原来 190 高不少（坐标轴字号放大 + 这次整体放宽），
+                     又给下面新增的实时区留了一行的位置；
+                     这个数是按"默认窗口 960x620 下主界面不出现上下滑动条"算的。-->
+                <Grid Margin="0,16,0,0" Height="230">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
@@ -299,12 +322,26 @@
                                 Margin="0,6,0,0" Click="MinKBtn_Click"/>
                     </StackPanel>
 
-                    <!-- 右：两张 K 线图（日K / 分钟K），叠在同一格里 -->
+                    <!-- 右：两张 K 线图（日K / 分钟K），叠在同一格里
+                         MinuteMode="True" 只影响 X 轴刻度写法：刻度写"时:分"，
+                         日K 那张不写这个属性，默认 false → 最左多一格年份、刻度写"月-日" -->
                     <Grid Grid.Column="1">
                         <local:CandleChart x:Name="KChartDay"/>
-                        <local:CandleChart x:Name="KChartMin" Visibility="Collapsed"/>
+                        <local:CandleChart x:Name="KChartMin" MinuteMode="True" Visibility="Collapsed"/>
                     </Grid>
                 </Grid>
+
+                <!-- ── 实时区：K 图下面一行小字，三个数据各自的"数据时间" ──
+                     盘口 / 日K / 分钟K 三格分别在成功拉到对应数据时更新，
+                     数据还没来时显示 - -（刷新逻辑见 MainPage.xaml.cs 的 RefreshTimeBar）。
+                     字号比正文小一号、颜色用灰，定位是"状态说明"，不跟主数据抢视线。-->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10,0,0">
+                    <!-- 最左边这格是整行的标题，说明后面三个数字是"数据更新时间" -->
+                    <TextBlock Text="数据更新时间" FontSize="11" Foreground="#FF8A8A8A" Margin="0,0,18,0"/>
+                    <TextBlock x:Name="tQuote"  Text="盘口 --"  FontSize="11" Foreground="#FF8A8A8A"/>
+                    <TextBlock x:Name="tDaily"  Text="日K --"   FontSize="11" Foreground="#FF8A8A8A" Margin="20,0,0,0"/>
+                    <TextBlock x:Name="tMinute" Text="分钟K --" FontSize="11" Foreground="#FF8A8A8A" Margin="20,0,0,0"/>
+                </StackPanel>
 
             </StackPanel>
         </ScrollViewer>
