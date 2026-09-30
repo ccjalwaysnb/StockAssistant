@@ -3,7 +3,7 @@
      MainPage.xaml —— "主界面"页
 
      从上到下五块（紧凑排布，目标是窗口默认大小时不用上下滑动）：
-       ① 标题（股票小助手.v1.0 正式版）
+     ① 标题（股票小助手.v2.0 正式版）
        ② 搜索行：市场按钮 + 输入框(SearchBox) + 搜索按钮
        ③ 报价行：名称 / 代码 / 现价 / 涨跌额 / 涨跌幅（居中一行）
        ④ 行情双栏区（2026-09-18 改版）：
@@ -25,7 +25,7 @@
         </Grid.RowDefinitions>
 
         <!-- ═══════════════ ① 标题 ═══════════════ -->
-        <TextBlock Grid.Row="0" Text="股票小助手.v1.0  正式版"
+    <TextBlock Grid.Row="0" Text="股票小助手.v2.0  正式版"
                    FontSize="22" FontWeight="Bold"
                    Foreground="White"
                    HorizontalAlignment="Center"
@@ -59,6 +59,16 @@
                     Style="{StaticResource SearchBtn}"
                     Margin="10,0,0,0"
                     Click="Search_Click"/>
+
+            <!-- 加自选：平时是藏起来的（Visibility="Collapsed"），
+                 只有"搜索成功、拿到股票名字"之后才由代码显示出来（见 MainPage.xaml.cs 的 Search_Click 末尾）。
+                 之所以藏起来，是因为搜索失败时（代码不存在、接口没连上）名字是空的，这时候加自选没意义。 -->
+            <Button x:Name="AddWatchBtn"
+                    Content="加自选"
+                    Style="{StaticResource SearchBtn}" Width="80"
+                    Margin="10,0,0,0"
+                    Visibility="Collapsed"
+                    Click="AddWatchBtn_Click"/>
 
             <!-- 市场下拉列表：Popup 浮动层，平时隐藏，点"市场"按钮弹出、选中后收起。
                  PlacementTarget 让它对准市场按钮，Placement=Bottom 让它出现在按钮正下方 -->

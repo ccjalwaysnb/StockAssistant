@@ -1,19 +1,62 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <!-- ═══════════════════════════════════════════════════════════════════════════
      WatchlistPage.xaml —— "自选股"页
 
-     内容待定：自选股票列表（代码 / 名称 / 现价 / 涨跌幅…），
-               支持加入、删除自选，双击某行跳到行情页。
-     现在只铺黑底 + 一行占位字，用来验证导航能切到这一页。
+     【版式】这一页从上到下就三样东西：
+
+         自选股                              ← 标题
+         名称   代码      现价      涨跌幅   涨跌   ← 表头（灰字）
+         ┌────────────────────────────────────────────────┐
+         │ 贵州茅台  sh600519  1683.000  +0.85%  +14.200  │ ← 一行 = 一只自选股
+         └────────────────────────────────────────────────┘
+         ┌────────────────────────────────────────────────┐
+         │ 英伟达    usNVDA     225.070  +0.22%   +0.490  │
+         └────────────────────────────────────────────────┘
+
+         一条自选股都没有时，这里显示正中央的"还未选择自选股"。
+
+     【为什么这一页的 XAML 变简单了】
+       上一版用的是 ItemsControl + DataTemplate（在 XAML 里描述"一行的样子"，
+       再用 {Binding 名字} 去数据里取字段）。现在改成"代码生成"：
+       表头和每一行都由 .xaml.cs 里的 RefreshWatchlistUI 照着那份"列配置表"造出来。
+       所以这一个文件里只剩三个"空容器"，一个 {Binding} 都没有 —— 好处是以后加一列
+       只改代码里那一张配置表，不用回来动 XAML。
      ═══════════════════════════════════════════════════════════════════════════ -->
 <UserControl x:Class="炒股小助手.WatchlistPage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <!-- 根 Grid 铺黑底，跟主窗口底色一致 -->
     <Grid Background="#FF111111">
-        <!-- 占位字：灰色、水平垂直都居中 -->
-        <TextBlock Text="自选股页面（内容开发中）"
-                   Foreground="#FF7A7A7A" FontSize="15"
-                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+
+        <!-- 三行布局：① 标题 ② 表头 ③ 一行行的自选股（多了就在这一格里滚动） -->
+        <Grid Margin="24,20,24,20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0" Text="自选股"
+                       FontSize="20" FontWeight="Bold" Foreground="White"/>
+
+            <!-- 表头：里面那几格由代码填（照列配置表生成），这里只留一个横向的容器。
+                 Margin 左边 16 是为了和下面每一行里的内容左边对齐。 -->
+            <StackPanel x:Name="HeaderRow" Grid.Row="1"
+                        Orientation="Horizontal" Margin="16,16,16,6"/>
+
+            <!-- 自选股列表：一行一个长方形，由代码往 RowList 里塞。
+                 VerticalScrollBarVisibility="Auto" = 自选股多了才出现滚动条，少的时候没有。 -->
+            <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                <StackPanel x:Name="RowList"/>
+            </ScrollViewer>
+        </Grid>
+
+        <!-- 空表提示：一条自选都没有时，它出现在整页正中央
+             （铺满整格 + 居中，所以是"页面正中央"而不是"列表开头"）。
+             平时是 Collapsed（收起来、不占位置），由代码决定露不露脸。 -->
+        <TextBlock x:Name="EmptyHint"
+                   Text="还未选择自选股"
+                   FontSize="18" Foreground="#FF8A8A8A"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   Visibility="Collapsed"/>
     </Grid>
 </UserControl>

@@ -6,8 +6,9 @@
      做法：标题是一个 Button（Tag 里写着"要控制哪一块内容"），内容是一个 Border，
            点标题时由代码把内容的 Visibility 在 Visible / Collapsed 之间来回切（见 .xaml.cs）。
 
-     以后加新版本：照着下面 v1.0 这一组复制一份，改三处名字就行 ——
-       Header2 / Body2 / Arrow2（Tag 里也改成 Body2）。
+     以后加新版本：新的那一组放最上面，编号从 1 往后排（1 = 最新，旧的依次往后挪），
+       每组三个名字 —— HeaderN / BodyN / ArrowN（标题按钮的 Tag 里写 BodyN）。
+     内容块初始一律 Visibility="Collapsed"（收起状态），箭头初始一律 "▶"。
      ═══════════════════════════════════════════════════════════════════════════ -->
 <UserControl x:Class="炒股小助手.UpdateLogPage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -48,11 +49,48 @@
                 <TextBlock Text="点版本号那一行可以展开 / 收起" FontSize="12"
                            Foreground="#FF8A8A8A" Margin="0,8,0,0"/>
 
-                <!-- ═══════════ v1.0 ═══════════ -->
+                <!-- ═══════════ v2.0（最新版，编号 1）═══════════ -->
                 <Button x:Name="Header1" Tag="Body1" Style="{StaticResource VersionHeaderBtn}"
                         Click="VersionHeader_Click">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock x:Name="Arrow1" Text="▼" FontSize="12"
+                        <TextBlock x:Name="Arrow1" Text="▶" FontSize="12"
+                                   Foreground="#FF8A8A8A" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                        <TextBlock Text="v2.0" FontSize="16" FontWeight="Bold"
+                                   Foreground="White" VerticalAlignment="Center"/>
+                        <TextBlock Text="2026.9.29" FontSize="13" Foreground="#FF9A9A9A"
+                                   VerticalAlignment="Center" Margin="18,0,0,0"/>
+                    </StackPanel>
+                </Button>
+
+                <Border x:Name="Body1" Visibility="Collapsed"
+                        Background="#FF1A1A1A" BorderBrush="#FF2A2A2A" BorderThickness="1"
+                        CornerRadius="4" Padding="18,14" Margin="0,6,0,0">
+                    <StackPanel>
+                        <TextBlock Text="自选股是这一版的重点。" FontSize="14" FontWeight="Bold"
+                                   Foreground="White" TextWrapping="Wrap"/>
+                        <TextBlock FontSize="13" Foreground="#FFB0B0B0" TextWrapping="Wrap"
+                                   Margin="0,12,0,0" LineHeight="22"
+                                   Text="· 自选股：搜到标的后一键加入 / 删除，记录写进桌面 UserCache.json，重启程序还在。"/>
+                        <TextBlock FontSize="13" Foreground="#FFB0B0B0" TextWrapping="Wrap"
+                                   Margin="0,6,0,0" LineHeight="22"
+                                   Text="· 自选股页：一行一只，显示名称 / 代码 / 现价 / 涨跌幅 / 涨跌；点任意一行直接跳回主页面搜这只票。"/>
+                        <TextBlock FontSize="13" Foreground="#FFB0B0B0" TextWrapping="Wrap"
+                                   Margin="0,6,0,0" LineHeight="22"
+                                   Text="· 自动更新范围扩大：盘口、分钟K 之外，自选股列表也每 0.5 秒刷新一次。"/>
+                        <TextBlock FontSize="13" Foreground="#FFB0B0B0" TextWrapping="Wrap"
+                                   Margin="0,6,0,0" LineHeight="22"
+                                   Text="· 启动前期准备：进界面前先检查缓存、先拉一遍自选股、先问一次市场开闭。"/>
+                        <TextBlock FontSize="13" Foreground="#FFB0B0B0" TextWrapping="Wrap"
+                                   Margin="0,6,0,0" LineHeight="22"
+                                   Text="· 界面：更新日志改成可展开 / 收起；自选股页面换成新版式。"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- ═══════════ v1.0 ═══════════ -->
+                <Button x:Name="Header2" Tag="Body2" Style="{StaticResource VersionHeaderBtn}"
+                        Click="VersionHeader_Click">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock x:Name="Arrow2" Text="▶" FontSize="12"
                                    Foreground="#FF8A8A8A" VerticalAlignment="Center" Margin="0,0,10,0"/>
                         <TextBlock Text="v1.0" FontSize="16" FontWeight="Bold"
                                    Foreground="White" VerticalAlignment="Center"/>
@@ -61,7 +99,7 @@
                     </StackPanel>
                 </Button>
 
-                <Border x:Name="Body1" Visibility="Visible"
+                <Border x:Name="Body2" Visibility="Collapsed"
                         Background="#FF1A1A1A" BorderBrush="#FF2A2A2A" BorderThickness="1"
                         CornerRadius="4" Padding="18,14" Margin="0,6,0,0">
                     <StackPanel>
